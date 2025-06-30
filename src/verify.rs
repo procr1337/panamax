@@ -17,7 +17,7 @@ use warp::http::HeaderValue;
 
 use crate::{
     crates::{
-        cargo_lock_to_mirror_entries, get_crate_path, sync_one_crate_entry,
+        cargo_lock_to_mirror_entries, get_crate_file_for_version, sync_one_crate_entry,
         vendor_path_to_mirror_entries, CrateEntry,
     },
     download::DownloadError,
@@ -226,8 +226,12 @@ pub(crate) async fn verify_mirror(
                 }
 
                 // Building crates local path.
-                let file_path =
-                    get_crate_path(&path, crate_entry.get_name(), crate_entry.get_vers()).unwrap();
+                let file_path = get_crate_file_for_version(
+                    &path,
+                    crate_entry.get_name(),
+                    crate_entry.get_vers(),
+                )
+                .unwrap();
 
                 // Checking if crate is missing.
                 if !CRATES_403

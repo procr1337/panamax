@@ -79,7 +79,7 @@ pub async fn sync_one_crate_entry(
         )
     };
 
-    let file_path = get_crate_path(path, &crate_entry.name, &crate_entry.vers)
+    let file_path = get_crate_file_for_version(path, &crate_entry.name, &crate_entry.vers)
         .ok_or_else(|| DownloadError::BadCrate(crate_entry.name.clone()))?;
 
     download(
@@ -181,7 +181,9 @@ pub async fn sync_crates_files(
             if oid.is_zero() {
                 // The crate was removed, continue to next crate.
                 // Note that this does not include yanked crates.
-                removed_crates.push(p.to_path_buf());
+                if let Some(crate_name) = p.file_name().and_then(|x| x.to_str()) {
+                    removed_crates.push(crate_name.to_owned());
+                }
                 return true;
             }
             let blob = repo.find_blob(oid).unwrap();
@@ -297,8 +299,10 @@ pub async fn sync_crates_files(
 
     // Delete any removed crates
     for rc in removed_crates {
-        // Try to remove the file, but ignore it if it doesn't exist
-        let _ = fs::remove_file(repo_path.join(rc));
+        // Try to remove the crate directory, but ignore it if it doesn't exist
+        if let Some(crate_dir) = get_crate_directory(path, &rc) {
+            let _ = fs::remove_dir_all(crate_dir);
+        }
     }
 
     // Set master to origin/master.
@@ -342,11 +346,7 @@ pub fn is_new_crates_format(path: &Path) -> Result<bool, io::Error> {
     Ok(true)
 }
 
-pub fn get_crate_path(
-    mirror_path: &Path,
-    crate_name: &str,
-    crate_version: &str,
-) -> Option<PathBuf> {
+pub fn get_crate_directory(mirror_path: &Path, crate_name: &str) -> Option<PathBuf> {
     let crate_path = match crate_name.len() {
         1 => PathBuf::from("1"),
         2 => PathBuf::from("2"),
@@ -362,11 +362,17 @@ pub fn get_crate_path(
         _ => return None,
     };
 
+    Some(mirror_path.join("crates").join(crate_path).join(crate_name))
+}
+
+pub fn get_crate_file_for_version(
+    mirror_path: &Path,
+    crate_name: &str,
+    crate_version: &str,
+) -> Option<PathBuf> {
+    let crate_dir = get_crate_directory(mirror_path, crate_name)?;
     Some(
-        mirror_path
-            .join("crates")
-            .join(crate_path)
-            .join(crate_name)
+        crate_dir
             .join(crate_version)
             .join(format!("{crate_name}-{crate_version}.crate")),
     )
